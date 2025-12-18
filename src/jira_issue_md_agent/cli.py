@@ -1,5 +1,6 @@
 """Command-line interface for Jira Issue MD Agent."""
 
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -19,6 +20,39 @@ app = typer.Typer(
     add_completion=False,
 )
 console = Console()
+
+def _parse_issue_file(file_path: Path) -> list[str]:
+    """Parse issue keys from a file.
+    
+    Supports formats:
+    - Plain list: one issue key per line
+    - Markdown list: - ISSUE-123
+    - Mixed with other text
+    
+    Args:
+        file_path: Path to the file
+        
+    Returns:
+        List of issue keys found
+    """
+    content = file_path.read_text(encoding="utf-8")
+    
+    # Pattern to match issue keys like JSAI-123, UEP-456, etc.
+    # Matches: PROJECT-NUMBER format
+    pattern = r'\b([A-Z][A-Z0-9]+-\d+)\b'
+    
+    matches = re.findall(pattern, content)
+    
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_keys = []
+    for key in matches:
+        if key not in seen:
+            seen.add(key)
+            unique_keys.append(key)
+    
+    return unique_keys
+
 
 
 @app.callback()
@@ -48,11 +82,17 @@ def fetch(
         "-q",
         help='Fetch multiple issues using JQL (e.g., "project = UEP AND status = Open")',
     ),
+    file: Optional[Path] = typer.Option(
+        None,
+        "--file",
+        "-f",
+        help="Read issue keys from a file (one per line or markdown list)",
+    ),
     limit: int = typer.Option(
         10,
         "--limit",
         "-l",
-        help="Maximum number of issues to fetch (default: 10)",
+        help="Maximum number of issues to fetch for JQL queries (default: 10)",
     ),
     out: Optional[Path] = typer.Option(
         None,
@@ -82,6 +122,9 @@ def fetch(
         # Fetch multiple issues with JQL
         jira-md fetch --jql "project = UEP AND assignee = currentUser()"
 
+        # Fetch issues from a file
+        jira-md fetch --file docs/issues.md
+
         # Custom output directory
         jira-md fetch --key UEP-123 --out ./my-outputs
 
@@ -89,12 +132,14 @@ def fetch(
         jira-md fetch --jql "sprint = 42" --no-overwrite
     """
     # Validate input
-    if not key and not jql:
-        console.print("[red]Error:[/red] Either --key or --jql must be specified")
+    if not key and not jql and not file:
+        console.print("[red]Error:[/red] Must specify one of: --key, --jql, or --file")
         raise typer.Exit(1)
 
-    if key and jql:
-        console.print("[red]Error:[/red] Cannot specify both --key and --jql")
+    # Check for conflicting options
+    options_count = sum([bool(key), bool(jql), bool(file)])
+    if options_count > 1:
+        console.print("[red]Error:[/red] Can only specify one of --key, --jql, or --file")
         raise typer.Exit(1)
 
     try:
@@ -113,11 +158,51 @@ def fetch(
 
         # Fetch issues
         console.print("\n" + "=" * 60)
+        
         if key:
             console.print(Panel(f"Fetching single issue: [bold]{key}[/bold]", expand=False))
-            issue = fetcher.fetch_single(key, limit=limit)
+            issue = fetcher.fetch_single(key)
             content = renderer.render(issue)
             writer.write(issue, content)
+
+        elif file:
+            # Read issue keys from file
+            console.print(Panel(f"Reading issue keys from: [bold]{file}[/bold]", expand=False))
+            try:
+                issue_keys = _parse_issue_file(file)
+                if not issue_keys:
+                    console.print("[yellow]No issue keys found in file[/yellow]")
+                    raise typer.Exit(0)
+                
+                console.print(f"[cyan]Found {len(issue_keys)} issue key(s)[/cyan]")
+                
+                # Fetch all issues
+                issues = []
+                for idx, issue_key in enumerate(issue_keys, 1):
+                    try:
+                        console.print(f"\n[cyan]Fetching {idx}/{len(issue_keys)}:[/cyan] {issue_key}")
+                        issue = fetcher.fetch_single(issue_key)
+                        issues.append(issue)
+                    except Exception as e:
+                        console.print(f"[red]✗[/red] Failed to fetch {issue_key}: {e}")
+                
+                if not issues:
+                    console.print("[yellow]No issues were successfully fetched[/yellow]")
+                    raise typer.Exit(1)
+                
+                # Render and write all issues
+                console.print(f"\n[cyan]Rendering {len(issues)} issue(s)...[/cyan]")
+                issues_with_content = [(issue, renderer.render(issue)) for issue in issues]
+                written_paths = writer.write_batch(issues_with_content)
+                
+                console.print(f"\n[bold green]✓ Successfully written {len(written_paths)} file(s)[/bold green]")
+                
+            except FileNotFoundError:
+                console.print(f"[red]Error:[/red] File not found: {file}")
+                raise typer.Exit(1)
+            except Exception as e:
+                console.print(f"[red]Error:[/red] Failed to read file: {e}")
+                raise typer.Exit(1)
 
         elif jql:
             console.print(Panel(f"Fetching issues with JQL:\n[bold]{jql}[/bold]", expand=False))
