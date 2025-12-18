@@ -4,7 +4,12 @@ version = "0.1.0"
 description = "A CLI tool to fetch Jira issues and convert them to development-ready Markdown files"
 authors = ["Bernie"]
 readme = "README.md"
-packages = [{include = "jira_issue_md_agent", from = "src"}]
+packages = [
+    {include = "jira_issue_md_agent", from = "src", format = ["sdist", "wheel"]}
+]
+include = [
+    {path = "src/jira_issue_md_agent/templates/issue.md.j2", format = ["sdist", "wheel"]}
+]
 
 [tool.poetry.dependencies]
 python = "^3.10"

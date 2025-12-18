@@ -82,23 +82,27 @@ class MarkdownWriter:
 
     @staticmethod
     def _slugify(text: str, max_length: int = 50) -> str:
-        """Convert text to URL-friendly slug.
+        """Convert text to file-friendly slug.
 
         Args:
             text: Text to slugify
             max_length: Maximum slug length
 
         Returns:
-            Slugified text
+            Slugified text (supports Unicode characters including Chinese)
         """
-        # Convert to lowercase
-        slug = text.lower()
+        # Remove leading/trailing whitespace
+        slug = text.strip()
 
-        # Remove special characters, keep alphanumeric and spaces
-        slug = re.sub(r"[^a-z0-9\s-]", "", slug)
-
-        # Replace spaces with hyphens
+        # Replace multiple spaces with single hyphen
         slug = re.sub(r"\s+", "-", slug)
+
+        # Remove characters that are invalid in Windows filenames
+        # Invalid: < > : " / \ | ? *
+        slug = re.sub(r'[<>:"/\\|?*]', "", slug)
+
+        # Remove control characters
+        slug = re.sub(r"[\x00-\x1f\x7f]", "", slug)
 
         # Remove multiple consecutive hyphens
         slug = re.sub(r"-+", "-", slug)
@@ -106,9 +110,15 @@ class MarkdownWriter:
         # Trim hyphens from ends
         slug = slug.strip("-")
 
-        # Truncate to max length
+        # Truncate to max length (considering multi-byte characters)
         if len(slug) > max_length:
-            slug = slug[:max_length].rsplit("-", 1)[0]
+            # Try to break at hyphen
+            truncated = slug[:max_length]
+            last_hyphen = truncated.rfind("-")
+            if last_hyphen > 0:
+                slug = truncated[:last_hyphen]
+            else:
+                slug = truncated
 
         return slug or "untitled"
 

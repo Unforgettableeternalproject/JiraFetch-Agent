@@ -28,8 +28,35 @@ cd JiraFetch-Agent
 # Install dependencies
 poetry install
 
-# Activate virtual environment
-poetry shell
+# Use via poetry
+poetry run jira-md --help
+```
+
+### Global Installation (pipx)
+
+For system-wide access without activating virtual environments:
+
+```bash
+# Install pipx (if not already installed)
+python -m pip install --user pipx
+python -m pipx ensurepath
+
+# Install the tool globally
+pipx install .
+
+# Now use it from anywhere
+jira-md --help
+```
+
+**Windows Users**: For proper Chinese character display in terminal output, configure PowerShell encoding:
+
+```powershell
+# Add to your PowerShell profile ($PROFILE)
+$env:PYTHONIOENCODING='utf-8'
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+
+# Or run before each session
+$env:PYTHONIOENCODING='utf-8'; [Console]::OutputEncoding = [System.Text.Encoding]::UTF8; jira-md fetch --key JSAI-123
 ```
 
 ### Using pip
@@ -76,15 +103,39 @@ jira-md fetch --key UEP-123
 ### Fetch Multiple Issues with JQL
 
 ```bash
-# Fetch all open issues assigned to you
-jira-md fetch --jql "project = UEP AND assignee = currentUser() AND status != Done"
+# Fetch all open issues assigned to you (with limit to prevent overwhelming output)
+jira-md fetch --jql "project = UEP AND assignee = currentUser() AND status != Done" --limit 20
 
 # Fetch issues from a specific sprint
-jira-md fetch --jql "sprint = 42"
+jira-md fetch --jql "sprint = 42" --limit 50
 
 # Fetch by status
 jira-md fetch --jql "project = UEP AND status = 'In Progress'"
 ```
+
+### Batch Fetch from File
+
+Create a file (e.g., `docs/issues.md`) with issue keys:
+
+```markdown
+## Sprint 42 Issues
+- JSAI-563 合規清單問題
+- JSAI-755 附件下載問題
+- JSAI-635 組織權限限制
+
+Or just list them:
+UEP-123
+UEP-456
+UEP-789
+```
+
+Then fetch all at once:
+
+```bash
+jira-md fetch --file docs/issues.md
+```
+
+The tool automatically extracts issue keys from the file (supports markdown lists, plain text, mixed formats).
 
 ### Custom Output Directory
 

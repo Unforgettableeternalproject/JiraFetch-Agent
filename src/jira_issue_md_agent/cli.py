@@ -153,7 +153,7 @@ def fetch(
 
         # Initialize components
         fetcher = IssueFetcher(settings)
-        renderer = MarkdownRenderer.from_package()
+        renderer = MarkdownRenderer()
         writer = MarkdownWriter(settings.output_dir, overwrite=not no_overwrite)
 
         # Fetch issues
